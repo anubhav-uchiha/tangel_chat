@@ -14,6 +14,7 @@ export const registerUserController = async (
       message: "User created successfully",
       data: user,
     });
+    return;
   } catch (error) {
     next(error);
   }
