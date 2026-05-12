@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { CustomError } from "../utils/error.types";
+import { CustomError } from "../types/error.types";
 
 export const errorMiddleware = (
   error: CustomError,
