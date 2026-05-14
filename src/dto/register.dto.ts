@@ -6,3 +6,8 @@ export interface RegisterDTO {
   password: string;
   phone?: string;
 }
+
+export interface LoginDTO {
+  email: string;
+  password: string;
+}
