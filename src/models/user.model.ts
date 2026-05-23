@@ -97,11 +97,12 @@ const userSchema = new Schema<IUser>(
       type: String,
       default: null,
     },
-    friends: {
-      type: [Schema.Types.ObjectId],
-      ref: "User",
-      default: [],
-    },
+    friends: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   { timestamps: true },
 );
