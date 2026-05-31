@@ -1,25 +1,144 @@
 import http from "http";
 import { Server, Socket } from "socket.io";
+import { createError } from "../utils/createError";
+import { verifyToken } from "../utils/jwt.util";
+import User from "../models/user.model";
+import Message from "../models/message.model";
+
+export const onlineUsers = new Map<string, string>();
+
+let io: Server;
+
+export const getIO = () => io;
 
 export const initializeSocket = (server: http.Server) => {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
       origin: "*",
     },
   });
-  io.on("connection", (socket: Socket) => {
-    console.log(`User Connected: ${socket.id}`);
 
-    socket.on("send_message", (data) => {
-      console.log("Message recived:", data);
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
 
-      socket.emit("receive_message", {
-        text: data.text,
-        message: "Message received by backend",
-      });
+      if (!token) {
+        return next(createError("Unauthorized", 401));
+      }
+
+      const decoded = verifyToken(token);
+
+      const user = await User.findById(decoded.userId);
+
+      if (!user) {
+        return next(createError("User not found", 404));
+      }
+
+      socket.data.user = user;
+
+      next();
+    } catch (error) {
+      next(createError("Authentication failed", 401));
+    }
+  });
+
+  io.on("connection", async (socket: Socket) => {
+    const userId = socket.data.user._id.toString();
+    onlineUsers.set(userId, socket.id);
+
+    await User.findByIdAndUpdate(userId, {
+      is_online: true,
+      socketId: socket.id,
     });
 
-    socket.on("disconnect", () => {
+    io.emit("user_status_changed", {
+      userId,
+      is_online: true,
+    });
+
+    console.log("Online Users: ", onlineUsers);
+    console.log(`User Connected: ${socket.id}`);
+    console.log("Authenticated User: ", socket.data.user.username);
+
+    socket.on("send_message", async (data) => {
+      try {
+        const { receiverId, text } = data;
+        const senderId = socket.data.user._id;
+
+        const senderUser = await User.findById(senderId);
+
+        if (!senderUser) {
+          return;
+        }
+
+        const isFriend = senderUser.friends.some(
+          (id) => id.toString() === receiverId,
+        );
+
+        if (!isFriend) {
+          socket.emit("error_message", {
+            message: "You are no longer friends",
+          });
+          return;
+        }
+
+        const newMessage = await Message.create({
+          sender: senderId,
+          receiver: receiverId,
+          text,
+        });
+
+        const receiverSocketId = onlineUsers.get(receiverId);
+
+        const messageData = {
+          _id: newMessage._id,
+          text: newMessage.text,
+          senderId,
+          receiverId,
+        };
+
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("receive_message", messageData);
+        }
+        socket.emit("receive_message", messageData);
+      } catch (error) {
+        console.log(error);
+      }
+    });
+
+    socket.on("typing", (data) => {
+      const receiverSocketId = onlineUsers.get(data.receiverId);
+
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("user_typing", {
+          userId: userId,
+        });
+      }
+    });
+
+    socket.on("stop_typing", (data) => {
+      const receiverSocketId = onlineUsers.get(data.receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("user_stop_typing", {
+          userId: userId,
+        });
+      }
+    });
+
+    socket.on("disconnect", async () => {
+      onlineUsers.delete(userId);
+
+      await User.findByIdAndUpdate(userId, {
+        is_online: false,
+        socketId: null,
+        lastSeen: new Date(),
+      });
+
+      io.emit("user_status_changed", {
+        userId,
+        is_online: false,
+        lastSeen: new Date(),
+      });
       console.log(`User Disconnected: ${socket.id}`);
     });
   });
