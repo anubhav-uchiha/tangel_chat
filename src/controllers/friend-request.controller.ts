@@ -7,7 +7,7 @@ import {
   acceptFriendRequestService,
   rejectFriendRequestService,
   unfriendService,
-} from "../services/firend-request.service";
+} from "../services/friend-request.service";
 import { getIO, onlineUsers } from "../sockets/socket";
 
 export const sendFriendRequestController = async (
