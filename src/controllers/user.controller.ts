@@ -6,6 +6,7 @@ import {
   getFriendsService,
 } from "../services/user.service";
 import { createError } from "../utils/createError";
+import { verifyToken } from "../utils/jwt.util";
 
 export const getCurrentUserController = async (
   req: AuthRequest,
@@ -30,12 +31,25 @@ export const getCurrentUserController = async (
 };
 
 export const getAllUsersController = async (
-  _: AuthRequest,
+  req: AuthRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const users = await getAllUsersService();
+    let currentUserId: string | undefined;
+    const authHeader = req.headers.authorization;
+
+    if (authHeader && authHeader?.startsWith("Bearer ")) {
+      try {
+        const token = authHeader.split(" ")[1];
+        const decoded = verifyToken(token);
+        currentUserId = decoded.userId;
+      } catch (error) {
+        currentUserId = undefined;
+      }
+    }
+    const users = await getAllUsersService(currentUserId);
+
     res.status(200).json({
       success: true,
       message: "User fetched successfully",

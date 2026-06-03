@@ -9,14 +9,14 @@ export interface IUser extends Document {
   phone?: string;
   userImage_url?: string | null;
   bio?: string | null;
+  socketId?: string | null;
+  friends: Types.ObjectId[];
   is_deleted: boolean;
   is_admin: boolean;
   is_active: boolean;
   is_online: boolean;
   deletedAt: Date | null;
   lastSeen: Date | null;
-  socketId?: string | null;
-  friends: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
