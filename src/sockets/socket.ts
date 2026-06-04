@@ -5,12 +5,14 @@ import { verifyToken } from "../utils/jwt.util";
 import User from "../models/user.model";
 import Message from "../models/message.model";
 
+// === online users map ===
 export const onlineUsers = new Map<string, string>();
 
 let io: Server;
 
 export const getIO = () => io;
 
+// === socket initialization ===
 export const initializeSocket = (server: http.Server) => {
   io = new Server(server, {
     cors: {
@@ -18,6 +20,7 @@ export const initializeSocket = (server: http.Server) => {
     },
   });
 
+  // === socket authentication ===
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
@@ -42,8 +45,11 @@ export const initializeSocket = (server: http.Server) => {
     }
   });
 
+  // === connection event ===
   io.on("connection", async (socket: Socket) => {
     const userId = socket.data.user._id.toString();
+
+    // === user online logic ===
     onlineUsers.set(userId, socket.id);
 
     await User.findByIdAndUpdate(userId, {
@@ -60,6 +66,7 @@ export const initializeSocket = (server: http.Server) => {
     console.log(`User Connected: ${socket.id}`);
     console.log("Authenticated User: ", socket.data.user.username);
 
+    // === send message ===
     socket.on("send_message", async (data) => {
       try {
         const { receiverId, text } = data;
@@ -68,6 +75,9 @@ export const initializeSocket = (server: http.Server) => {
         const senderUser = await User.findById(senderId);
 
         if (!senderUser) {
+          socket.emit("error_message", {
+            message: "Sender not found",
+          });
           return;
         }
 
@@ -106,6 +116,7 @@ export const initializeSocket = (server: http.Server) => {
       }
     });
 
+    // === typing indicator ===
     socket.on("typing", (data) => {
       const receiverSocketId = onlineUsers.get(data.receiverId);
 
@@ -118,6 +129,7 @@ export const initializeSocket = (server: http.Server) => {
 
     socket.on("stop_typing", (data) => {
       const receiverSocketId = onlineUsers.get(data.receiverId);
+
       if (receiverSocketId) {
         io.to(receiverSocketId).emit("user_stop_typing", {
           userId: userId,
@@ -125,6 +137,7 @@ export const initializeSocket = (server: http.Server) => {
       }
     });
 
+    // === disconnect event ===
     socket.on("disconnect", async () => {
       onlineUsers.delete(userId);
 
