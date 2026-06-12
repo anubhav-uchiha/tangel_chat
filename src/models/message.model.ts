@@ -4,6 +4,7 @@ export interface IMessage extends Document {
   sender: mongoose.Types.ObjectId;
   receiver: mongoose.Types.ObjectId;
   text: string;
+  imageUrl?: string | null;
   is_seen: boolean;
 }
 
@@ -21,8 +22,12 @@ const messageSchema = new Schema<IMessage>(
     },
     text: {
       type: String,
-      required: true,
+      default: "",
       trim: true,
+    },
+    imageUrl: {
+      type: String,
+      default: null,
     },
     is_seen: {
       type: Boolean,
