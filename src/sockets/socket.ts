@@ -55,6 +55,7 @@ export const initializeSocket = (server: http.Server) => {
     await User.findByIdAndUpdate(userId, {
       is_online: true,
       socketId: socket.id,
+      lastSeen: null,
     });
 
     io.emit("user_status_changed", {
@@ -69,7 +70,14 @@ export const initializeSocket = (server: http.Server) => {
     // === send message ===
     socket.on("send_message", async (data) => {
       try {
-        const { receiverId, text } = data;
+        const { receiverId, text, imageUrl } = data;
+
+        if (!text?.trim() && !imageUrl) {
+          socket.emit("error_message", {
+            message: "Message cannot be empty",
+          });
+          return;
+        }
         const senderId = socket.data.user._id;
 
         const senderUser = await User.findById(senderId);
@@ -95,7 +103,8 @@ export const initializeSocket = (server: http.Server) => {
         const newMessage = await Message.create({
           sender: senderId,
           receiver: receiverId,
-          text,
+          text: text || "",
+          imageUrl: imageUrl || null,
         });
 
         const receiverSocketId = onlineUsers.get(receiverId);
@@ -103,8 +112,11 @@ export const initializeSocket = (server: http.Server) => {
         const messageData = {
           _id: newMessage._id,
           text: newMessage.text,
+          imageUrl: newMessage.imageUrl,
           senderId,
           receiverId,
+          is_seen: newMessage.is_seen,
+          is_deleted: newMessage.is_deleted,
         };
 
         if (receiverSocketId) {
@@ -134,6 +146,70 @@ export const initializeSocket = (server: http.Server) => {
         io.to(receiverSocketId).emit("user_stop_typing", {
           userId: userId,
         });
+      }
+    });
+
+    // === tick mark message seen ===
+    socket.on("mark_messages_seen", async (data) => {
+      const currentUserId = socket.data.user._id;
+      await Message.updateMany(
+        {
+          sender: data.friendId,
+          receiver: currentUserId,
+          is_seen: false,
+        },
+        {
+          is_seen: true,
+        },
+      );
+      const friendSocketId = onlineUsers.get(data.friendId);
+
+      if (friendSocketId) {
+        io.to(friendSocketId).emit("message_seen", {
+          userId: currentUserId,
+        });
+        console.log("Emitting message_seen to: ", data.friendId);
+      }
+    });
+
+    // === delete message event ===
+    socket.on("delete_message", async (data) => {
+      try {
+        const { messageId } = data;
+        const currentUserId = socket.data.user._id;
+        const message = await Message.findById(messageId);
+        if (!message) {
+          socket.emit("error_message", {
+            message: "Message not found",
+          });
+          return;
+        }
+
+        if (message.sender.toString() !== currentUserId.toString()) {
+          socket.emit("error_message", {
+            message: "You can only delete your own messages",
+          });
+          return;
+        }
+
+        message.is_deleted = true;
+        message.deletedAt = new Date();
+
+        await message.save();
+
+        const receiverSocketId = onlineUsers.get(message.receiver.toString());
+
+        const payload = {
+          messageId,
+        };
+
+        socket.emit("message_deleted", payload);
+
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("message_deleted", payload);
+        }
+      } catch (error) {
+        console.log(error);
       }
     });
 

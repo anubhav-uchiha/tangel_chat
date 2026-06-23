@@ -6,6 +6,9 @@ export interface IMessage extends Document {
   text: string;
   imageUrl?: string | null;
   is_seen: boolean;
+  is_deleted: boolean;
+  deletedFor: mongoose.Types.ObjectId[];
+  deletedAt: Date | null;
 }
 
 const messageSchema = new Schema<IMessage>(
@@ -32,6 +35,20 @@ const messageSchema = new Schema<IMessage>(
     is_seen: {
       type: Boolean,
       default: false,
+    },
+    is_deleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedFor: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    deletedAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true },
